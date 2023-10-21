@@ -1,0 +1,13 @@
+#lib/*
+etc/*
+src/*
+dist
+node_modules
+/package-lock.json
+.DS_Store
+build/*
+npm-debug.log
+config.jsx
+!config.jsx.dist
+.idea
+babel.config.txt
