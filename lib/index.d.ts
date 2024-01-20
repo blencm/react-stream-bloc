@@ -1,15 +1,8 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
-import { JSX } from 'react/jsx-runtime';
+import { ReactElementLike } from 'prop-types';
 import * as React from 'react';
-import { ReactNode } from 'react';
 import { Observable } from 'rxjs';
 
-type ReactComponentLike = string | ((props: any, context?: any) => any) | (new (props: any, context?: any) => any);
-interface ReactElementLike {
-    type: ReactComponentLike;
-    props: any;
-    key: string | null;
-}
 interface BlocProviderProps {
     children: React.ReactNode;
     providers: ReactElementLike[];
@@ -29,12 +22,53 @@ declare abstract class Bloc<S> {
     unsubscribe(listener: Subscription<S>): void;
 }
 
-interface BlocBuilderProps<B extends Bloc<S>, S> {
-    bloc: B;
-    builder: (state: S) => JSX.Element;
+interface AuthProps {
+    /**
+     * Define when the cookie will be removed. Value can be a Number
+     * which will be interpreted as days from time of creation or a
+     * Date instance. If omitted, the cookie becomes a session cookie.
+     */
+    expires?: number | Date | undefined;
+    /**
+     * Define the path where the cookie is available. Defaults to '/'
+     */
+    path?: string | undefined;
+    /**
+     * Define the domain where the cookie is available. Defaults to
+     * the domain of the page where the cookie was created.
+     */
+    domain?: string | undefined;
+    /**
+     * A Boolean indicating if the cookie transmission requires a
+     * secure protocol (https). Defaults to false.
+     */
+    secure?: boolean | undefined;
+    /**
+     * Asserts that a cookie must not be sent with cross-origin requests,
+     * providing some protection against cross-site request forgery
+     * attacks (CSRF)
+     */
+    sameSite?: "strict" | "Strict" | "lax" | "Lax" | "none" | "None" | undefined;
+    /**
+     * An attribute which will be serialized, conformably to RFC 6265
+     * section 5.2.
+     */
+    [property: string]: any;
 }
 
-declare const BlocBuilder: <B extends Bloc<S>, S>({ bloc, builder, }: BlocBuilderProps<B, S>) => react_jsx_runtime.JSX.Element;
+declare const auth: (key: string) => string | undefined;
+declare const setAuth: (key: string, data: string, options?: AuthProps) => string | undefined;
+declare const removeAuth: (key: string, options?: AuthProps) => boolean;
+declare const getStore: (key: string, session?: boolean) => any;
+declare const setStore: (key: string, data: any, session?: boolean) => boolean;
+declare const removeStore: (key: string, session?: boolean) => boolean;
+declare const clearStore: (session?: boolean) => boolean;
+
+interface BlocBuilderProps<B extends Bloc<S>, S> {
+    bloc: B;
+    builder: (state: S) => React.JSX.Element;
+}
+declare const BlocBuilder: <B extends Bloc<S>, S>({ bloc, builder, }: BlocBuilderProps<B, S>) => React.JSX.Element;
 
 declare enum ConnectionState {
     none = 0,
@@ -59,7 +93,7 @@ interface DoneSnapshot<T> {
 }
 interface StreamBuilderProps<T> {
     stream: Observable<T>;
-    builder: (snapshot: Snapshot<T>) => ReactNode;
+    builder: (snapshot: Snapshot<T>) => React.ReactNode;
 }
 interface StreamBuilderState<T> {
     snapshot: Snapshot<T>;
@@ -75,4 +109,4 @@ declare class StreamBuilder<T> extends React.Component<StreamBuilderProps<T>, St
 
 declare function createContext<T>(): readonly [React.Context<T | undefined>, () => NonNullable<T>];
 
-export { Bloc, BlocBuilder, BlocProvider, StreamBuilder, createContext };
+export { Bloc, BlocBuilder, BlocProvider, StreamBuilder, auth, clearStore, createContext, getStore, removeAuth, removeStore, setAuth, setStore };
