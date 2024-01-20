@@ -1,6 +1,6 @@
 # `react-stream-bloc`
 
-The `react-stream-bloc` package contains only the functionality necessary to define Bloc models in JavaScript. Typically used in user interface components.
+The `react-stream-bloc` package contains only the functionality necessary to define Bloc models in JavaScript and TypeScript. Typically used in user interface components.
 
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](https://opensource.org/licenses/MIT)
 
@@ -12,231 +12,168 @@ Using npm:
 npm install react-stream-bloc
 ```
 
+## Documentation
+
+The basic idea behind the Bloc pattern is simple. Business logic will be isolated from UI components. First, they will use an observer to send events to the Bloc. The Bloc will then notify UI components via observables after processing the request.
+
+### Adaptability for updating the application's logic
+
+The impact on the application is minimal when the business logic is separated from the UI components. You may alter the business logic whenever you want without impacting the UI components.
+
+### Repurpose logic
+
+Because the business logic is in one location, UI components may reuse logic without duplicating code, increasing the app's simplicity.
+
+### Scalability
+
+Application needs may evolve over time, and business logic may expand. In such cases, developers can even construct many BloCs to keep the codebase clear.
+
+
+
 ## Usage example BlocBuilder
 
-This UseState.ts file is where we add our states and their variables to handle events in the Bloc.
+<a href="https://codesandbox.io/s/react-stream-bloc-example-qk3kjy"><img src="https://uploads.codesandbox.io/uploads/user/193b58fe-97f6-4cde-9078-6bb2dc49b95d/WT71-CodeSandbox.png"></a>
+
+Create a state file and add your variables as you like.
 
 ```javascript
-interface InitialState {
-  filter?: string;
-}
-
-interface LoadingState {
-  type: "Loading";
-}
-
-interface LoadedState {
-  type: "Loaded";
-  data?: Array<User>;
-}
-
-interface ErrorState {
-  type: "Error";
-  message?: string;
-}
-
 export interface User {
   id: string;
   name: string;
 }
 
-export type UserState = (LoadingState | LoadedState | ErrorState) &
-  InitialState;
+export type UserState = {
+  loading: boolean;
+  adding?: boolean;
+  data: User[];
+  message?: string;
+};
 
 export const UserInitialState: UserState = {
-  type: "Loading",
+  loading: false,
+  data: [],
 };
 ```
 
-Create UserBloc.ts, add any functions that update states.
+Create a Bloc class file and add your functions, to change state always add `this.changeState(...)`
 
 ```javascript
+import { Bloc } from "react-stream-bloc";
+import axios from "axios";
+
+axios.defaults.baseURL = 'http://localhost:4000/api/';
+
 export class UserBloc extends Bloc<UserState> {
   private users: User[] = [];
 
-  constructor(private data: User[]) {
+  constructor() {
     super(UserInitialState);
-    this.loadCart()
   }
 
-  private loadCart() {
-    this.changeState(this.mapUserState(this.data));
-  }
+  async getUsers() {
+    this.changeState(...this.state, loading: true);
 
-  addUser(data: User) {
-    const exists = this.users.find((i) => i.id === data.id);
-
-    if (exists) {
-      const newUsers = this.users.map((oldUser) => {
-        if (oldUser.id === data.id) {
-          return { ...oldUser, data };
-        } else {
-          return oldUser;
-        }
+    await axios.get("users")
+      .then((response) => {
+        this.changeState(this.mapToLoadedState(response.data));
+      })
+      .catch((err) => {
+        this.changeState(...this.state, loading: false, message: err.toString());
       });
-
-      this.changeState(this.mapUserState(newUsers));
-    } else {
-      const newUsers = [...this.users, data];
-
-      this.changeState(this.mapUserState(newUsers));
-    }
   }
 
-  updateUser(data: User) {
-    const newUsers = this.users.map((oldUser) => {
-      if (oldUser.id === data.id) {
-        return { ...oldUser, data };
-      } else {
-        return oldUser;
-      }
-    });
-
-    this.changeState(this.mapUserState(newUsers));
+  async addUser(data: User){
+    this.changeState(...this.state, adding: true);
+        await axios.post("user", data)
+      .then((response) => {
+        if(response.status === 200){
+          const user = response.data as User;
+          const newUsers = [user].concat(this.users);
+          this.changeState(this.mapToLoadedState(newUsers));
+        }else{
+          this.changeState(...this.state, adding: false);
+        }
+      })
+      .catch((err) => {
+        this.changeState(...this.state, adding: false, message: err.toString());
+      });
   }
 
-  removeUser(data: User) {
-    const newUsers = this.users.filter((i) => i.id !== data.id);
-    this.changeState(this.mapUserState(newUsers));
-  }
-
-  mapUserState(users: Array<User>): UserState {
+  mapToLoadedState(users: User[]): UserState {
     this.users = users;
-
     return {
-      type: "Loaded",
-      data: users,
+      loading: false,
+      adding: false,
+      data: this.users,
     };
   }
 }
 ```
 
-Create DependenciesProvider.ts, add the data you want to initialize and implement a class or function.
+Create a dependency provider file, here you initialize the data when your application is opened. If you want to extend the data initialization of a class or function, Easily insert it into your Bloc file.
 
 ```javascript
-import { UserBloc } from "./UserBloc";
-
-export function provideUserBloc(): UserBloc {
-  const bloc = new UserBloc([]); //Init your values
+export function provideUserBloc() {
+  const bloc = new UserBloc();
   return bloc;
 }
 ```
 
-UserContent.tsx is a component function.
-
-This file is a child that will be listening or sending values using the UserBloc, all children that are listening will update the data sent or received.
+Create a provider file.
 
 ```javascript
-import * as React from "react";
-import { BlocBuilder } from "react-stream-bloc";
-import { useUserBloc } from "./App";
-import { UserState, User } from "./UserState";
-import { v4 as uuidv4 } from "uuid";
+import { createContext } from "react-stream-bloc";
 
-const UserContent = () => {
+const [userContext, useUser] = createContext<UserBloc>();
+
+const useUserBloc = useUser;
+export { userContext, useUserBloc };
+```
+
+### Implementing UI components.
+
+This file is a child that will be listening or sending values using the Bloc, all children that are listening will update the data sent or received.
+
+```javascript
+import { BlocBuilder } from "react-stream-bloc";
+
+export const UserContent = () => {
   const bloc = useUserBloc();
-  const [name, setName] = React.useState < string > "";
 
   const handleAdd = () => {
-    if (name) {
-      const user: User = {
-        id: uuidv4(),
-        name: name,
-      };
-
-      bloc.addUser(user);
-      setName("");
-    }
+    const user: User = {
+      id: "id",
+      name: "Stream Bloc",
+    };
+    bloc.addUser(user);
   };
 
   return (
     <div style={{ margin: 30 }}>
-      <div style={{ display: "flex" }}>
-        <input
-          type="text"
-          value={name}
-          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-            setName(event.target.value)
-          }
-          style={{ marginRight: 20 }}
-        />
-        <button onClick={handleAdd}>Add user</button>
-      </div>
-
       <BlocBuilder
         bloc={bloc}
-        builder={(state: UserState) => {
-          switch (state.type) {
-            case "Loading": {
-              return <div>Loading content</div>;
-            }
-            case "Error": {
-              return <div>Error content</div>;
-            }
-            case "Loaded": {
-              return (
-                <div style={{ alignItems: "center" }}>
-                  {state.data.length > 0 ? (
-                    <div>
-                      {state.data.map((item, index) => (
-                        <div
-                          key={index}
-                          style={{
-                            display: "flex",
-                            padding: 5,
-                          }}
-                        >
-                          <span>{item.name}</span>
-                          <button
-                            style={{
-                              color: "white",
-                              backgroundColor: "red",
-                              border: 0,
-                              marginLeft: 20,
-                            }}
-                            onClick={() => bloc.removeUser(item)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <>Empty</>
-                  )}
-                </div>
-              );
-            }
-          }
-        }}
+        builder={(state: UserState) =>
+          <div>
+          <button onClick={state.adding ? null : handleAdd}>{state.adding ? 'Loading...' : 'Add'}</button>
+          {state.loading ? <div> Loading... </div> : <div> {content} </div>}
+          </div>
+        }
       />
     </div>
   );
 };
-
-export default UserContent;
 ```
 
-In App.tsx add BlocProvider, you can add multiple providers in a list and initialize the value of DependenciesProvider.
+In App add BlocProvider, you can add multiple providers in a list and initialize the value of DependenciesProvider.
 
 ```javascript
-import * as React from "react";
-import { BlocProvider, createContext } from "react-stream-bloc";
-import { UserBloc } from "./UserBloc";
-import { providerUserBloc } from "./DependenciesProvider";
-import UserContent from "./Content";
-
-const [userContext, userUse] = createContext<UserBloc>();
-
-export const useUserBloc = userUse;
+import { BlocProvider } from "react-stream-bloc";
+import { userContext } from "./UserProvider";
 
 const App = () => {
   return (
     <BlocProvider
-      providers={[
-        <userContext.Provider value={providerUserBloc()} />,
-        //<anyContext.Provider value={providerAnyBloc()} /> --- Add multiple providers
-      ]}
+      providers={[<userContext.Provider value={providerUserBloc()} />]}
     >
       <UserContent />
     </BlocProvider>
@@ -245,65 +182,6 @@ const App = () => {
 
 export default App;
 ```
-
-## Usage example StreamBuilder
-
-As you can see now, increase() and decrease() methods are called directly within the UI component. However, output data is handle by a stream builder.
-
-```javascript
-import { Fragment } from "react";
-
-import { StreamBuilder } from "react-stream-bloc";
-
-const Counter = ({ bloc }) => (
-  <Fragment>
-    <button onClick={() => bloc.increase()}>+</button>
-    <button onClick={() => bloc.decrease()}>-</button>
-    <lable size="large" color="olive">
-      Count:
-      <StreamBuilder
-        initialData={0}
-        stream={bloc.counter}
-        builder={(snapshot) => <p>{snapshot.data}</p>}
-      />
-    </lable>
-  </Fragment>
-);
-
-export default Counter;
-```
-
-In the app.js file, the BLoC is initialized using the CounterBloc class. Thus, the Counter component is used by passing the BLoC as a prop.
-
-```javascript
-import React, { Component } from "react";
-import Counter from "./components/Counter";
-import CounterBloc from "./blocs/CounterBloc";
-
-const bloc = new CounterBloc();
-
-class App extends Component {
-  componentWillUnmount() {
-    bloc.dispose();
-  }
-  render() {
-    return (
-      <div>
-        <Counter bloc={bloc} />
-      </div>
-    );
-  }
-}
-export default App;
-```
-
-## Contributing
-
-Contributions are always welcome!
-
-### Individuals
-
-<a href="https://www.paypal.com/donate/?hosted_button_id=HF7VE43FW43NE"><img src="https://pics.paypal.com/00/s/NTY1NGQ2NjItZmUzZi00YzU3LTg0NzItYTcyZGJjZTFlYTFm/file.PNG?width=890"></a>
 
 ## Authors
 
